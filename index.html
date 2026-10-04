@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AP 乘車試算</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  --bg: #eef2f7; --surface: #ffffff; --ink: #141a24; --muted: #5c6778;
+  --line: #d9e0ea; --red: #e2401c; --blue: #1a7fd9; --warn: #b54708;
+  --font-display: "Chakra Petch", "Noto Sans TC", system-ui, sans-serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1118; --surface: #171d27; --ink: #eef2f8; --muted: #9aa5b6;
+    --line: #2a3342; --red: #ff6a43; --blue: #4aa6ff; --warn: #f5a524; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body);
+  font-size: 16px; line-height: 1.5;
+  padding-inline: 16px;
+  padding-block: calc(32px + env(safe-area-inset-top, 0px)) calc(48px + env(safe-area-inset-bottom, 0px));
+}
+.card {
+  max-width: 460px; margin: 0 auto; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+  box-shadow: 0 12px 40px rgba(20, 30, 50, .08);
+}
+header { display: flex; align-items: center; gap: 14px; padding: 22px 24px 8px; }
+header img { width: 64px; height: auto; flex: none; }
+header h1 { margin: 0; font-size: 1.35rem; font-weight: 700; }
+header p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+.rates { display: flex; gap: 8px; padding: 10px 24px 0; flex-wrap: wrap; }
+.chip { font-size: .8rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip b { font-family: var(--font-display); color: var(--ink); }
+.body { padding: 20px 24px 24px; display: grid; gap: 16px; }
+.lbl { font-size: .8rem; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+
+.route-fields { position: relative; display: grid; gap: 8px; margin-top: 6px; }
+.loc {
+  display: flex; align-items: center; gap: 10px;
+  border: 2px solid var(--line); border-radius: 12px; padding: 10px 52px 10px 14px;
+  transition: border-color .15s;
+}
+.loc:focus-within { border-color: var(--blue); }
+.dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.dot.from { background: var(--red); }
+.dot.to { background: var(--blue); }
+.loc input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }
+.loc input::placeholder { color: var(--muted); }
+.swap {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--line);
+  background: var(--surface); color: var(--ink); font-size: 1.1rem; cursor: pointer;
+}
+.swap:hover { border-color: var(--blue); color: var(--blue); }
+.resolved { font-size: .78rem; color: var(--muted); margin: 6px 0 0; display: grid; gap: 2px; }
+.resolved span { overflow-wrap: anywhere; }
+
+.calc {
+  border: 0; border-radius: 12px; padding: 13px; font: inherit; font-weight: 700; font-size: 1rem;
+  color: #fff; background: var(--blue); cursor: pointer;
+}
+.calc:hover { filter: brightness(1.08); }
+.calc:disabled { opacity: .6; cursor: progress; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.status { font-size: .88rem; margin: 0; min-height: 1.3em; color: var(--muted); }
+.status.err { color: var(--warn); }
+
+#map { height: 200px; border-radius: 12px; border: 1px solid var(--line); }
+#map[hidden] { display: none; }
+
+.toggle { display: flex; align-items: center; gap: 10px; font-size: .95rem; cursor: pointer; user-select: none; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--red); }
+.km-row { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.km-row input {
+  width: 7em; border: 2px solid var(--line); border-radius: 10px; padding: 6px 10px;
+  background: transparent; color: var(--ink);
+  font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.km-row span { color: var(--muted); font-size: .85rem; }
+
+.result {
+  border-radius: 16px; padding: 18px 20px; color: #fff;
+  background: linear-gradient(120deg, #e2401c, #f07a1a 45%, #1a7fd9 46%, #0f5fb0);
+}
+.result .cap { font-size: .8rem; letter-spacing: .08em; opacity: .9; }
+.total { font-family: var(--font-display); font-weight: 700; font-size: 3rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.total small { font-size: 1.4rem; margin-right: 2px; }
+.route-line { font-size: .85rem; opacity: .95; margin-top: 4px; overflow-wrap: anywhere; }
+.breakdown { display: grid; gap: 6px; font-size: .92rem; margin: 0; }
+.breakdown div { display: flex; justify-content: space-between; gap: 12px; }
+.breakdown dt { color: var(--muted); }
+.breakdown dd { margin: 0; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.breakdown .sum { border-top: 1px dashed var(--line); padding-top: 8px; font-weight: 700; }
+.breakdown .sum dt { color: var(--ink); }
+.note { font-size: .75rem; color: var(--muted); margin: 0; }
+.note a { color: inherit; }
+.checker {
+  height: 14px;
+  background: conic-gradient(var(--ink) 25%, var(--surface) 0 50%, var(--ink) 0 75%, var(--surface) 0) 0 0 / 14px 14px;
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <header>
+    <img src="logo.png" alt="AP logo">
+    <div>
+      <h1>乘車費用試算</h1>
+      <p>輸入上下車地點，自動計算里程與車資</p>
+    </div>
+  </header>
+  <div class="rates">
+    <span class="chip">起步費 <b>$50</b></span>
+    <span class="chip">每公里 <b>$20</b></span>
+  </div>
+
+  <form class="body" id="form" novalidate>
+    <div>
+      <span class="lbl">乘車路線</span>
+      <div class="route-fields">
+        <label class="loc"><span class="dot from" aria-hidden="true"></span>
+          <input id="from" type="text" placeholder="上車地點（地標或地址）" aria-label="上車地點" autocomplete="off" value="台北車站">
+        </label>
+        <label class="loc"><span class="dot to" aria-hidden="true"></span>
+          <input id="to" type="text" placeholder="下車地點（地標或地址）" aria-label="下車地點" autocomplete="off" value="台北101">
+        </label>
+        <button class="swap" id="swap" type="button" aria-label="交換上下車地點">⇅</button>
+      </div>
+      <div class="resolved" id="resolved" hidden>
+        <span id="res-from"></span>
+        <span id="res-to"></span>
+      </div>
+    </div>
+
+    <button class="calc" id="calc" type="submit">計算里程與車資</button>
+    <p class="status" id="status" role="status"></p>
+    <div id="map" hidden></div>
+
+    <label class="toggle"><input id="round" type="checkbox"> 來回（里程 × 2，起步費收兩次）</label>
+
+    <div>
+      <label class="lbl" for="km">行車里程</label>
+      <div class="km-row">
+        <input id="km" type="number" inputmode="decimal" min="0" max="999" step="0.1" value="0">
+        <span>公里（自動帶入，也可手動修改）</span>
+      </div>
+    </div>
+
+    <div class="result" aria-live="polite">
+      <div class="cap">預估車資</div>
+      <div class="total"><small>NT$</small><span id="total">50</span></div>
+      <div class="route-line" id="route-line"></div>
+    </div>
+
+    <dl class="breakdown">
+      <div><dt>起步費</dt><dd id="b-base">$50</dd></div>
+      <div><dt id="b-km-label">里程 0 公里 × $20</dt><dd id="b-km">$0</dd></div>
+      <div class="sum"><dt>合計</dt><dd id="b-sum">$50</dd></div>
+    </dl>
+
+    <p class="note">里程依開車路線估算，試算結果僅供參考，實際車資以現場計費為準。金額四捨五入至整數元。地圖資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者，路線規劃使用 OSRM。</p>
+  </form>
+  <div class="checker" aria-hidden="true"></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const BASE = 50, PER_KM = 20;
+const $ = id => document.getElementById(id);
+const from = $('from'), to = $('to'), km = $('km'), round = $('round'), statusEl = $('status');
+const fmt = n => '$' + n.toLocaleString('zh-TW');
+let duration = null; // 秒
+
+// ---------- 車資 ----------
+function render() {
+  let d = parseFloat(km.value);
+  if (isNaN(d) || d < 0) d = 0;
+  const trips = round.checked ? 2 : 1;
+  const base = BASE * trips;
+  const dist = Math.round(PER_KM * d * trips);
+  $('total').textContent = (base + dist).toLocaleString('zh-TW');
+  $('b-base').textContent = fmt(base);
+  $('b-km-label').textContent = `里程 ${+(d * trips).toFixed(2)} 公里 × $${PER_KM}`;
+  $('b-km').textContent = fmt(dist);
+  $('b-sum').textContent = fmt(base + dist);
+  const a = from.value.trim(), b = to.value.trim();
+  let line = a && b ? a + (round.checked ? ' ⇄ ' : ' → ') + b : '';
+  if (line && duration != null) line += `・約 ${Math.max(1, Math.round(duration * trips / 60))} 分鐘`;
+  $('route-line').textContent = line;
+}
+
+// ---------- 地點查詢（Nominatim，查不到再用 Photon）----------
+async function geocodeOnce(q) {
+  const n = await fetch('https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+    q, format: 'jsonv2', limit: 1, countrycodes: 'tw', 'accept-language': 'zh-TW'
+  })).then(r => r.ok ? r.json() : []).catch(() => []);
+  if (n.length) return { lat: +n[0].lat, lon: +n[0].lon, name: n[0].display_name };
+
+  const p = await fetch('https://photon.komoot.io/api/?' + new URLSearchParams({
+    q, limit: 1, lat: 23.7, lon: 121, bbox: '119.3,21.8,122.1,25.4'
+  })).then(r => r.ok ? r.json() : null).catch(() => null);
+  const f = p && p.features && p.features[0];
+  if (f) {
+    const pr = f.properties;
+    const name = [pr.name, pr.street, pr.district, pr.city, pr.county].filter(Boolean).join('，');
+    return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], name };
+  }
+  return null;
+}
+
+// 台灣門牌在 OSM 不齊全：依序嘗試原文、台/臺互換、去掉樓層門牌、去掉巷弄
+function variants(q) {
+  const v = [q];
+  const swap = q.includes('臺') ? q.replace(/臺/g, '台') : q.replace(/台(?=[北中南東])/g, '臺');
+  const noNum = q.replace(/[0-9０-９之\-]+號.*$/, '').replace(/[0-9０-９]+樓.*$/, '');
+  const noLane = noNum.replace(/[0-9０-９]+(巷|弄).*$/, '');
+  [swap, noNum, noLane].forEach(x => { x = x.trim(); if (x.length > 1 && !v.includes(x)) v.push(x); });
+  return v;
+}
+async function geocode(q) {
+  const list = variants(q);
+  for (let i = 0; i < list.length; i++) {
+    const r = await geocodeOnce(list[i]);
+    if (r) return { ...r, approx: /號/.test(q) && !/號/.test(list[i]) };
+  }
+  return null;
+}
+
+async function route(a, b) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
+  const r = await fetch(url).then(r => r.json());
+  if (r.code !== 'Ok' || !r.routes.length) throw new Error('route');
+  return r.routes[0];
+}
+
+// ---------- 地圖 ----------
+let map, layer;
+function showMap(a, b, geo) {
+  const el = $('map');
+  if (typeof L === 'undefined') return;
+  el.hidden = false;
+  if (!map) {
+    map = L.map(el, { zoomControl: false, attributionControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    }).addTo(map);
+  }
+  if (layer) layer.remove();
+  const dot = (p, c) => L.circleMarker([p.lat, p.lon], { radius: 8, color: '#fff', weight: 3, fillColor: c, fillOpacity: 1 });
+  const line = L.geoJSON(geo, { style: { color: '#1a7fd9', weight: 5, opacity: .85 } });
+  layer = L.featureGroup([line, dot(a, '#e2401c'), dot(b, '#1a7fd9')]).addTo(map);
+  map.invalidateSize();
+  map.fitBounds(layer.getBounds(), { padding: [24, 24] });
+}
+
+// ---------- 流程 ----------
+function setStatus(msg, err) { statusEl.textContent = msg; statusEl.classList.toggle('err', !!err); }
+
+async function calculate() {
+  const a = from.value.trim(), b = to.value.trim();
+  if (!a || !b) { setStatus('請輸入' + (!a ? '上車' : '下車') + '地點。', true); (!a ? from : to).focus(); return; }
+  const btn = $('calc');
+  btn.disabled = true; btn.textContent = '計算中…'; setStatus('正在查詢地點…');
+  $('resolved').hidden = true; $('map').hidden = true;
+  try {
+    const pa = await geocode(a);
+    if (!pa) throw { msg: `找不到「${a}」，請換個寫法，例如加上縣市或改用地標名稱。` };
+    const pb = await geocode(b);
+    if (!pb) throw { msg: `找不到「${b}」，請換個寫法，例如加上縣市或改用地標名稱。` };
+    const tag = p => p.approx ? '（找不到門牌，以路段位置估算）' : '';
+    $('res-from').textContent = '上車：' + pa.name + tag(pa);
+    $('res-to').textContent = '下車：' + pb.name + tag(pb);
+    $('resolved').hidden = false;
+    setStatus('正在規劃路線…');
+    let r;
+    try { r = await route(pa, pb); }
+    catch { throw { msg: '路線服務暫時無法使用，請稍後再試，或直接在里程欄手動輸入公里數。' }; }
+    km.value = (r.distance / 1000).toFixed(1);
+    duration = r.duration;
+    setStatus(`已依開車路線計算：${km.value} 公里。請確認下方實際地點是否正確。`);
+    showMap(pa, pb, r.geometry);
+    render();
+  } catch (e) {
+    setStatus(e && e.msg ? e.msg : '查詢失敗，請檢查網路連線後再試。', true);
+    km.value = 0; duration = null; render();
+  } finally {
+    btn.disabled = false; btn.textContent = '計算里程與車資';
+  }
+}
+
+$('form').addEventListener('submit', e => { e.preventDefault(); calculate(); });
+$('swap').addEventListener('click', () => {
+  [from.value, to.value] = [to.value, from.value];
+  if (!$('resolved').hidden) calculate(); else render();
+});
+km.addEventListener('input', () => { duration = null; render(); });
+round.addEventListener('change', render);
+[from, to].forEach(i => i.addEventListener('input', render));
+render();
+calculate(); // 開啟時先用範例路線示範
+</script>
+</body>
+</html>
