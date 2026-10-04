@@ -104,6 +104,19 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
 .breakdown .sum dt { color: var(--ink); }
 .note { font-size: .75rem; color: var(--muted); margin: 0; }
 .note a { color: inherit; }
+.hint { margin: 4px 0 0; font-size: .78rem; color: var(--muted); }
+@media (max-width: 520px) {
+  body { padding-inline: 0; padding-block: 0; }
+  .card { border: 0; border-radius: 0; box-shadow: none; min-height: 100vh; min-height: 100dvh; }
+  header { padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 4px; gap: 12px; }
+  header img { width: 52px; }
+  header h1 { font-size: 1.2rem; }
+  .rates { padding: 8px 16px 0; }
+  .body { padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px)); gap: 14px; }
+  .loc { padding-block: 12px; }
+  .total { font-size: 2.6rem; }
+  #map { height: 180px; }
+}
 .checker {
   height: 14px;
   background: conic-gradient(var(--ink) 25%, var(--surface) 0 50%, var(--ink) 0 75%, var(--surface) 0) 0 0 / 14px 14px;
@@ -117,7 +130,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
     <img src="logo.png" alt="AP logo">
     <div>
       <h1>乘車費用試算</h1>
-      <p>輸入上下車地點，自動計算里程與車資</p>
+      <p>輸入上下車地點，自動算出車資</p>
     </div>
   </header>
   <div class="rates">
@@ -143,19 +156,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
       </div>
     </div>
 
-    <button class="calc" id="calc" type="submit">計算里程與車資</button>
-    <p class="status" id="status" role="status"></p>
-    <div id="map" hidden></div>
-
     <label class="toggle"><input id="round" type="checkbox"> 來回（里程 × 2，起步費收兩次）</label>
 
-    <div>
-      <label class="lbl" for="km">行車里程</label>
-      <div class="km-row">
-        <input id="km" type="number" inputmode="decimal" min="0" max="999" step="0.1" value="0">
-        <span>公里（自動帶入，也可手動修改）</span>
-      </div>
-    </div>
+    <button class="calc" id="calc" type="submit">計算里程與車資</button>
+    <p class="status" id="status" role="status"></p>
 
     <div class="result" aria-live="polite">
       <div class="cap">預估車資</div>
@@ -168,6 +172,17 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
       <div><dt id="b-km-label">里程 0 公里 × $20</dt><dd id="b-km">$0</dd></div>
       <div class="sum"><dt>合計</dt><dd id="b-sum">$50</dd></div>
     </dl>
+
+    <div>
+      <label class="lbl" for="km">行車里程</label>
+      <div class="km-row">
+        <input id="km" type="number" inputmode="decimal" min="0" max="999" step="0.1" value="0">
+        <span>公里</span>
+      </div>
+      <p class="hint">自動帶入，也可手動修改</p>
+    </div>
+
+    <div id="map" hidden></div>
 
     <p class="note">里程依開車路線估算，試算結果僅供參考，實際車資以現場計費為準。金額四捨五入至整數元。地圖資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者，路線規劃使用 OSRM。</p>
   </form>
@@ -279,8 +294,9 @@ async function calculate() {
     const pb = await geocode(b);
     if (!pb) throw { msg: `找不到「${b}」，請換個寫法，例如加上縣市或改用地標名稱。` };
     const tag = p => p.approx ? '（找不到門牌，以路段位置估算）' : '';
-    $('res-from').textContent = '上車：' + pa.name + tag(pa);
-    $('res-to').textContent = '下車：' + pb.name + tag(pb);
+    const short = n => n.split(/[,，]\s*/).filter(x => !/^\d+$/.test(x) && x !== '臺灣').slice(0, 4).join('，');
+    $('res-from').textContent = '上車：' + short(pa.name) + tag(pa);
+    $('res-to').textContent = '下車：' + short(pb.name) + tag(pb);
     $('resolved').hidden = false;
     setStatus('正在規劃路線…');
     let r;
@@ -288,7 +304,7 @@ async function calculate() {
     catch { throw { msg: '路線服務暫時無法使用，請稍後再試，或直接在里程欄手動輸入公里數。' }; }
     km.value = (r.distance / 1000).toFixed(1);
     duration = r.duration;
-    setStatus(`已依開車路線計算：${km.value} 公里。請確認下方實際地點是否正確。`);
+    setStatus(`已依開車路線計算：${km.value} 公里。請確認上方定位的地點是否正確。`);
     showMap(pa, pb, r.geometry);
     render();
   } catch (e) {
